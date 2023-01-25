@@ -30,10 +30,11 @@ int main(int argc, char **argv, char **envp) {
      * CHILD.
      */
     __close(fds[1]); // TODO: error handling.
-    if (dup2(fds[0], STDIN_FILENO) == -1) {
+    int r_end = fds[0];
+    if (dup2(r_end, STDIN_FILENO) == -1) {
       fprintf(stderr, "dup2() error during FD rerouting: %s\n",
                        strerror(errno));
-      __close(fds[0]);
+      __close(r_end);
       return 1;
     }
 
@@ -45,7 +46,7 @@ int main(int argc, char **argv, char **envp) {
       execve(cat_args[0], cat_args, envp);
     }
 
-    __close(fds[0]);
+    __close(r_end);
     return 0;
   }
 
@@ -53,6 +54,7 @@ int main(int argc, char **argv, char **envp) {
    * PARENT.
    */
   __close(fds[0]);
+  int w_end = fds[1];
 
   char *src_name = __FILE__;
 
@@ -60,6 +62,7 @@ int main(int argc, char **argv, char **envp) {
   if (!fp) {
     fprintf(stderr, "fopen() error during opening of file '%s': %s\n",
                     src_name, strerror(errno));
+    __close(w_end);
     return 1;
   }
 
@@ -67,9 +70,9 @@ int main(int argc, char **argv, char **envp) {
   char buf[BUF_SIZE] = { 0 };
   size_t num_read = 0;
   while ((num_read = fread(buf, sizeof(char), BUF_SIZE, fp)) > 0)
-    write(fds[1], buf, num_read);
+    write(w_end, buf, num_read);
 
-  __close(fds[1]);
+  __close(w_end);
 
   if (!feof(fp))
     fprintf(stderr, "fread() error (reading stopped before EOF): %s\n",
