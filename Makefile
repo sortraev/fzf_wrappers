@@ -1,21 +1,21 @@
-printself: printself.c
-	gcc -o3 $< -o $@
+fzf_fif: fzf_fif.c
+	gcc -O3 $< -o $@
+fzf_changedir: fzf_wrap.c
+	gcc -O3 -DCHANGEDIR_NO_IGNORE=0 $< -o $@
+fzf_changedir_no_ignore: fzf_wrap.c
+	gcc -O3 -DCHANGEDIR_NO_IGNORE=1 $< -o $@
 
-run: printself
+
+run: fzf_fif
 	./$<
 
-
-debug: printself.c
-	gcc -g3 $< -o $@
+debug: fzf_wrap.c
+	gcc -g3 -DCHANGEDIR_NO_IGNORE=0 $< -o $@
 
 check: debug
 	valgrind --track-fds=yes --leak-check=full ./$<
 
-.PHONY: simple
-simple: simple.c
-	@gcc $< -o $@
-	@$$(./$@ | diff $< -) && echo "(success)"
 
 
 clean:
-	rm -rf printself debug simple **vgcore**
+	rm -rf fzf_changedir_no_ignore fzf_changedir fzf_fif debug simple **vgcore**
