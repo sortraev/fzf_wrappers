@@ -1,4 +1,3 @@
-
 #include <stdlib.h> // malloc, exit
 #include <stdio.h>  // printf, fprintf, fgets, fclose, etc.
 #include <string.h> // strerror, strcpy, strlen.
@@ -6,162 +5,76 @@
 #include <unistd.h> // fork, pipe,
 #include <sys/wait.h>
 
-#ifndef CHANGEDIR_NO_IGNORE
-#define CHANGEDIR_NO_IGNORE 0
-#endif
 
-/*
- * unfinished ideas:
- *   main: open rg_pipe;
- *         fork() rg_child;
- *         close rg_pipe.write;
- *         open fzf_pipe;
- *         fork() fzf_child;
- *         close fzf_pipe.read;
- *         exec fzf.
- *   child1:
- *
- *   main:   read from child1; write to child2; exec fzf.
- *   child1: close reading; write to main; exec rg.
- */
-
-int __close(int fildes);
-int rg_child(int fds[2]);
-int fzf_child(int fds[2]);
-int parent_f(int rg_r_end, int cut_w_end);
-
-
-int fzf_child(int fds[2]) {
-  __close(fds[0]);
-  int r_end = fds[0];
-  int w_end = fds[1];
-
-  if (dup2(w_end, STDOUT_FILENO) == -1) {
-    fprintf(stderr, "dup2() error during stdout rerouting: %s\n",
-                     strerror(errno));
-    __close(r_end);
-    __close(w_end);
-    return 1;
-  }
-
-  char *_argv[] = {
-    "fzf",
-    "--ansi",
-    "--reverse",
-    "--preview-window=~2,+{2}",
-    "--preview",
-    "bat --theme gruvbox-dark --color=always {1} --highlight-line {2}",
-    NULL
-  };
-
-  if (execvp(_argv[0], _argv) == -1) {
-    // TODO: how to handle exec() errors??
-    fprintf(stderr, "execvp() error: %s\n", strerror(errno));
-  }
-  // this is only reached if exec does not succeed.
-  __close(r_end);
-  __close(w_end);
-  return 1;
-}
-
-int rg_child(int fds[2]) {
-  __close(fds[0]);
-  int w_end = fds[1];
-
-  if (dup2(w_end, STDOUT_FILENO) == -1) {
-    fprintf(stderr, "dup2() error during stdout rerouting: %s\n",
-                     strerror(errno));
-    __close(w_end);
-    return 1;
-  }
-
-  char *_argv[] = {
-    "rg",
-    "--line-number",
-    "--with-filename",
-    "--field-match-separator= ",
-    "--color=always",
-    "--colors=match:none",
-    "--colors=path:fg:cyan",
-    "--colors=line:fg:yellow",
-    ".",
-    NULL
-  };
-
-
-  if (execvp(_argv[0], _argv) == -1) {
-    // TODO: how to handle exec() errors??
-    fprintf(stderr, "execvp() error: %s\n", strerror(errno));
-  }
-  // this is only reached if exec does not succeed.
-  __close(w_end);
-  return 1;
-}
-
-int fzf_child(int fds[2]) {
-  __close(fds[0]);
-  int w_end = fds[1];
-
-  if (dup2(w_end, STDOUT_FILENO) == -1) {
-    fprintf(stderr, "dup2() error during stdout rerouting: %s\n",
-                     strerror(errno));
-    __close(w_end);
-    return 1;
-  }
-
-  char *_argv[] = {
-    "rg",
-    "--line-number",
-    "--with-filename",
-    "--field-match-separator= ",
-    "--color=always",
-    "--colors=match:none",
-    "--colors=path:fg:cyan",
-    "--colors=line:fg:yellow",
-    ".",
-    NULL
-  };
-
-
-  if (execvp(_argv[0], _argv) == -1) {
-    // TODO: how to handle exec() errors??
-    fprintf(stderr, "execvp() error: %s\n", strerror(errno));
-  }
-  // this is only reached if exec does not succeed.
-  __close(w_end);
-  return 1;
-}
-
-int nvim_child(int fds[2]) {
-  __close(fds[1]);
-  int r_end = fds[0];
-
-  FILE *r_end_fp = fdopen(r_end, "r");
-  // TODO: error handle fdopen
+#include "myutils.h"
 
 #define BUF_SIZE 128
+
+#ifndef DEBUG
+#define DEBUG 0
+#endif
+
+int parent(int fds[2], pid_t childpid);
+int child1(int fds[2]);
+int child2(int fds[2]);
+
+
+
+
+int main() {
+  int fds[2];
+  if (pipe(fds) != 0) {
+    perror("pipe() error");
+    return 1;
+  }
+
+  /*
+   * FORK RG/FZF SUBPROCESS TREE
+   */
+  pid_t pid = fork();
+  if (pid == -1) {
+    perror("fork() error");
+    __close(fds[0]);
+    __close(fds[1]);
+    return 1;
+  }
+  else if (pid == 0)
+    return child1(fds);
+
+  parent(fds, pid);
+}
+
+
+int parent(int fds[2], pid_t childpid) {
+  __close(fds[1]);
+
+  FILE *r_fp = fdopen(fds[0], "r");
+  if (!r_fp) {
+    perror("fdopen()");
+    return 1;
+  }
+
   char buf[BUF_SIZE] = { 0 };
-  while (fgets(buf, BUF_SIZE, r_end_fp) != NULL);
+  while (fgets(buf, BUF_SIZE, r_fp) != NULL);
 
-  if (fclose(r_end_fp) != 0)
-    fprintf(stderr, "fclose() error: %s\n", strerror(errno));
+  if (fclose(r_fp) != 0)
+    // don't exit, just continue and let OS handle it.
+    perror("fclose() error");
 
+
+  // extract filename and line number.
   char *saveptr;
   char *file = strtok_r(buf,  " ", &saveptr);
   char *line = strtok_r(NULL, " ", &saveptr);
 
-  if (!(file && line)) {
-    // TODO: error handle this case.
+  if (!file || !line) { // TODO: error handle this case (?)
     return 1;
   }
 
-#define JUST_PRINT_FILE_AND_LINE 1
-  // launch nvim directly or simply print "<file> +<line>"?
-#if JUST_PRINT_FILE_AND_LINE
-  printf("%s +%s", file, line);
-  return 0;
-#else
-  // add a '+' in front of the line number string.
+  // append '+' to start of line string.
+  // we effectively increase the size of `line` by 1; this is always possible
+  // because `line` would only have been correctly parsed if it was followed by
+  // a space character (and possibly more).
   char *s = line;
   while (*(s++));
   *(s + 1) = '\0';
@@ -171,44 +84,79 @@ int nvim_child(int fds[2]) {
   }
   *s = '+';
 
+
+#if DEBUG
+  // if DEBUG, simply print `nvim <filename> +<linenumber>`
+  printf("nvim %s %s\n", file, line);
+  return 0;
+#else
+
+  // TODO: why wait here?
+#if 0
+  int stat_loc;
+  pid_t _childpid = waitpid(childpid, &stat_loc, 0);
+  if (_childpid == -1)
+    perror("waitpid() error");
+  else if (_childpid != childpid) {
+    ;
+    // TODO: how to handle this?? probably not even necessary.
+  }
+  else if (!WIFEXITED(stat_loc))
+    fprintf(stderr, "Child exited abnormally with exit code %d\n",
+                    WEXITSTATUS(stat_loc));
+#endif
+
+  // launch nvim at the specified file and line.
   char *_argv[] = {
-    "echo",
+    "nvim",
     file,
     line,
     NULL
   };
 
-  if (execvp(_argv[0], _argv) == -1) {
-    // TODO: how to handle exec() errors??
-    fprintf(stderr, "execvp() error: %s\n", strerror(errno));
-  }
-  // this is only reached if exec does not succeed.
-  return 1;
+  return __myexec(_argv);
 #endif
 }
 
 
+int child1(int main_fds[2]) {
+  __close(main_fds[0]);
 
-int parent_f(int fds[2]) {//int rg_r_end, int cut_w_end) {
-
-  if (dup2(rg_r_end, STDIN_FILENO) == -1) {
-    fprintf(stderr, "dup2() error during stdin rerouting: %s\n",
-                     strerror(errno));
-    __close(cut_w_end);
-    __close(rg_r_end);
-    return 1;
-  }
-  if (dup2(cut_w_end, STDOUT_FILENO) == -1) {
-    fprintf(stderr, "dup2() error during stdin rerouting: %s\n",
-                     strerror(errno));
-    __close(cut_w_end);
-    __close(rg_r_end);
+  if (__dup2(main_fds[1], STDOUT_FILENO) == -1) {
+    __close(main_fds[1]);
     return 1;
   }
 
+  int fds[2];
+  if (pipe(fds) != 0) {
+    perror("pipe()");
+    __close(main_fds[1]);
+    return 1;
+  }
 
-  // CHANGEDIR_NO_IGNORE
-  char *_argv[] = {
+  pid_t pid = fork();
+  if (pid == -1) {
+    perror("pipe()");
+    __close(main_fds[1]);
+    __close(fds[0]);
+    __close(fds[1]);
+    return 1;
+  }
+  else if (pid == 0)
+    return child2(fds);
+
+  __close(fds[1]);
+
+
+  if (__dup2(fds[0], STDIN_FILENO) == -1) {
+    // TODO: does anything else need to be closed here?
+    __close(fds[0]);
+    __close(main_fds[1]);
+    return 1;
+  }
+
+
+  char *fzf_argv[] = {
     "fzf",
     "--ansi",
     "--reverse",
@@ -218,101 +166,36 @@ int parent_f(int fds[2]) {//int rg_r_end, int cut_w_end) {
     NULL
   };
 
-  if (execvp(_argv[0], _argv) == -1) {
-    // TODO: how to handle exec() errors??
-    fprintf(stderr, "execvp() error: %s\n", strerror(errno));
-  }
-  // this is only reached if exec fails.
-  __close(rg_r_end);
-  __close(cut_w_end);
+  __myexec(fzf_argv);
+
+  // TODO: should anything else be closed?
+  __close(main_fds[0]);
+  __close(main_fds[1]);
   return 1;
 }
 
-int __close(int fildes) {
-  int r = close(fildes);
-  if (r != 0)
-    fprintf(stderr, "close() error: %s\n", strerror(errno));
-  return r;
-}
 
+int child2(int fds[2]) {
+  __close(fds[0]);
 
-int main(int argc, char **argv) {
-  (void) argc;
-  (void) argv;
-
-  int fds[2];
-  if (pipe(fds) != 0) {
-    fprintf(stderr, "pipe() error: %s\n", strerror(errno));
-    return 1;
-  }
-
-  pid_t childpid = fork();
-  if (childpid == -1) {
-    fprintf(stderr, "fork() error: %s\n", strerror(errno));
-    __close(fds[0]);
+  if (__dup2(fds[1], STDOUT_FILENO) == -1) {
     __close(fds[1]);
     return 1;
   }
 
-  else if (childpid == 0) {
-    /*
-     * CHILD.
-     */
-    (void) rg_child(fds);
-    return 0;
-  }
+  char *rg_argv[] = {
+    "rg",
+    "--line-number",
+    // "-m1", // only one match per file
+    "--with-filename",
+    "--field-match-separator= ",
+    "--color=always",
+    "--colors=match:none",
+    "--colors=path:fg:cyan",
+    "--colors=line:fg:yellow",
+    ".",
+    NULL
+  };
 
-  int rg_r_end = fds[0];
-  __close(fds[1]);
-
-  int fds2[2];
-  if (pipe(fds2) != 0) {
-    fprintf(stderr, "pipe() error: %s\n", strerror(errno));
-    return 1;
-  }
-
-  pid_t childpid2 = fork();
-  if (childpid2 == -1) {
-    fprintf(stderr, "fork() error: %s\n", strerror(errno));
-    // TODO: close fds
-    __close(rg_r_end);
-    __close(fds2[0]);
-    __close(fds2[1]);
-    return 1;
-  }
-  else if (childpid2 == 0) {
-    (void) cut_child(fds2);
-    return 0;
-  }
-
-  // TODO: correct??
-  __close(fds2[0]);
-  int cut_w_end = fds2[1];
-
-  /*
-   * PARENT.
-   */
-  (void) parent_f(rg_r_end, cut_w_end);
-
-  /*
-   * CHILD EXIT HANDLING.
-   * TODO: if execvp succeeded, then this code will never be reached. in this
-   * case, how is the child handled? I'm guessing waiting is only necessary when
-   * we are interested in/dependent on the child's result somehow.
-   *
-   * for now, let's just leave it here.
-   */
-  int stat_loc;
-  pid_t _childpid = waitpid(childpid, &stat_loc, 0);
-  if (_childpid == -1)
-    fprintf(stderr, "waitpid() error: %s\n", strerror(errno));
-  else if (_childpid != childpid) {
-    ;
-    // TODO: how to handle this?? probably not even necessary.
-  }
-  else if (!WIFEXITED(stat_loc))
-    fprintf(stderr, "Child exited abnormally with exit code %d\n",
-                    WEXITSTATUS(stat_loc));
-
-  return 0;
+  return __myexec(rg_argv);
 }
