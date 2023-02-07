@@ -19,8 +19,6 @@ int child1(int fds[2]);
 int child2(int fds[2]);
 
 
-
-
 int main() {
   int fds[2];
   if (pipe(fds) != 0) {
@@ -73,8 +71,8 @@ int parent(int fds[2], pid_t childpid) {
 
   // append '+' to start of line string.
   // we effectively increase the size of `line` by 1; this is always possible
-  // because `line` would only have been correctly parsed if it was followed by
-  // a space character (and possibly more).
+  // because if `line` is parsed, then it will always *at least* have a newline
+  // char following the number string.
   char *s = line;
   while (*(s++));
   *(s + 1) = '\0';
@@ -91,8 +89,8 @@ int parent(int fds[2], pid_t childpid) {
   return 0;
 #else
 
-  // TODO: why wait here?
 #if 0
+  // TODO: why wait here?
   int stat_loc;
   pid_t _childpid = waitpid(childpid, &stat_loc, 0);
   if (_childpid == -1)
