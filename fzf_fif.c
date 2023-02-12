@@ -1,10 +1,3 @@
-#include <stdlib.h> // malloc, exit
-#include <stdio.h>  // printf, fprintf, fgets, fclose, etc.
-#include <string.h> // strerror, strcpy, strlen.
-#include <errno.h>  // errno.
-#include <unistd.h> // fork, pipe,
-#include <sys/wait.h>
-
 #include "myutils.h"
 
 #define BUF_SIZE 128
@@ -17,7 +10,6 @@
 int parent(int fds[2], pid_t childpid);
 int child1(int fds[2]);
 int child2(int fds[2]);
-
 
 int main() {
   int fds[2];
@@ -55,10 +47,16 @@ int parent(int fds[2], pid_t childpid) {
   char buf[BUF_SIZE] = { 0 };
   while (fgets(buf, BUF_SIZE, r_fp) != NULL);
 
+
   if (fclose(r_fp) != 0)
     // don't exit, just continue and let OS handle it.
     perror("fclose() error");
 
+  if (!*buf) {
+    // buf is empty at this point if fzf was interrupted *or* if the input to
+    // fzf was empty (eg. if fzf_fif was initiated from an empty directory).
+    return 0;
+  }
 
   // extract filename and line number.
 #if DEBUG
@@ -168,9 +166,10 @@ int child1(int main_fds[2]) {
     "fzf",
     "--ansi",
     "--reverse",
+    "--delimiter="FIELD_MATCH_SEPARATOR,
     "--preview-window=~2,+{2}",
     "--preview",
-    "bat --theme gruvbox-dark --color=always {1} --highlight-line {2}",
+    "bat --theme gruvbox-dark --color=always {1} --highlight-line {2} --style=header,numbers",
     NULL
   };
 
@@ -194,7 +193,7 @@ int child2(int fds[2]) {
   char *rg_argv[] = {
     "rg",
     "--line-number",
-    // "-m1", // only one match per file
+    // "-m1", // only one match per file (TODO: find out how this would work).
     "--with-filename",
     "--field-match-separator="FIELD_MATCH_SEPARATOR,
     "--color=always",
