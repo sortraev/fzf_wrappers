@@ -1,3 +1,4 @@
+# compilation
 fzf_fif: fzf_fif.c
 	gcc -O3 $< -o $@
 
@@ -7,13 +8,18 @@ fzf_changedir: fzf_changedir.c
 fzf_changedir_no_ignore: fzf_changedir.c
 	gcc -O3 -DCHANGEDIR_NO_IGNORE=1 $< -o $@
 
-deploy: deploy_fif deploy_changedir
 
+# debug
+fzf_fif_debug: fzf_fif.c
+	gcc -g3 -DDEBUG=1 $< -o $@
+
+
+# "deployment"
+deploy: deploy_fif deploy_changedir
 deploy_fif: fzf_fif
 	mv $^ ~/.local/bin
-
 deploy_changedir: fzf_changedir fzf_changedir_no_ignore
 	mv $^ ~/.local/bin
 
 clean:
-	rm -rf fzf_changedir_no_ignore fzf_changedir fzf_fif **vgcore**
+	rm -rf fzf_changedir_no_ignore fzf_changedir fzf_fif fzf_fif_debug **vgcore**

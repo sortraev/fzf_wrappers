@@ -5,10 +5,10 @@
 #include <unistd.h> // fork, pipe,
 #include <sys/wait.h>
 
-
 #include "myutils.h"
 
 #define BUF_SIZE 128
+#define FIELD_MATCH_SEPARATOR ":"
 
 #ifndef DEBUG
 #define DEBUG 0
@@ -61,11 +61,23 @@ int parent(int fds[2], pid_t childpid) {
 
 
   // extract filename and line number.
-  char *saveptr;
-  char *file = strtok_r(buf,  " ", &saveptr);
-  char *line = strtok_r(NULL, " ", &saveptr);
+#if DEBUG
+  printf("buf: %s\n", buf);
+#endif
+  char *tmp;
+  char *file = strtok_r(buf,  FIELD_MATCH_SEPARATOR, &tmp);
+  char *line = strtok_r(NULL, FIELD_MATCH_SEPARATOR, &tmp);
 
-  if (!file || !line) { // TODO: error handle this case (?)
+  int good_parse = file && line               // correctly parsed file and line.
+                && strtol(line, &tmp, 10) > 0 // line nums should be positive.
+                && *tmp == '\0';              // check strtol() success.
+
+  if (!good_parse) {
+    fprintf(stderr, "\x1b[31mfzf_fif error: Failed to parse file and/or line from rg "
+                    "output.\x1b[0m\n"
+                    "Got: file = \"%s\", line = \"%s\".\n\n"
+                    "Note: fzf_fif does not work with file names containing "
+                    "'"FIELD_MATCH_SEPARATOR"'.\n", file, line);
     return 1;
   }
 
@@ -82,10 +94,8 @@ int parent(int fds[2], pid_t childpid) {
   }
   *s = '+';
 
-
 #if DEBUG
-  // if DEBUG, simply print `nvim <filename> +<linenumber>`
-  printf("nvim %s %s\n", file, line);
+  printf("file: %s\nline: %s\nnvim %s %s\n", file, line, file, line);
   return 0;
 #else
 
@@ -186,7 +196,7 @@ int child2(int fds[2]) {
     "--line-number",
     // "-m1", // only one match per file
     "--with-filename",
-    "--field-match-separator= ",
+    "--field-match-separator="FIELD_MATCH_SEPARATOR,
     "--color=always",
     "--colors=match:none",
     "--colors=path:fg:cyan",
