@@ -8,10 +8,13 @@
 #define CHANGEDIR_NO_IGNORE 0
 #endif
 
-int fd_child(int fds[2]);
-int fzf_parent(int fds[2]);
+int fd_child(int fds[2], int no_ignore);
+int fzf_parent(int fds[2], int no_ignore);
 
-int main() {
+int main(int argc, char **argv) {
+
+  // TODO: foolproof, but not very scalable hack to enable no_ignore.
+  int no_ignore = argc > 1;
 
   int fds[2];
   if (pipe(fds) != 0) {
@@ -28,13 +31,13 @@ int main() {
   }
 
   else if (pid == 0)
-    return fd_child(fds);
-  fzf_parent(fds);
+    return fd_child(fds, no_ignore);
+  fzf_parent(fds, no_ignore);
 
   return 0;
 }
 
-int fd_child(int fds[2]) {
+int fd_child(int fds[2], int no_ignore) {
   __close(fds[0]);
   int w_end = fds[1];
 
@@ -48,11 +51,7 @@ int fd_child(int fds[2]) {
     "--type=directory",
     "--hidden",
     "--exclude=.git",
-#if CHANGEDIR_NO_IGNORE
-    "--no-ignore",
-#else
-    "--exclude=.*",
-#endif
+    no_ignore ? "--no-ignore" : "--exclude=.*",
     NULL
   };
 
@@ -62,7 +61,7 @@ int fd_child(int fds[2]) {
   return 1;
 }
 
-int fzf_parent(int fds[2]) {
+int fzf_parent(int fds[2], int no_ignore) {
   __close(fds[1]);
   int r_end = fds[0];
 
@@ -77,11 +76,10 @@ int fzf_parent(int fds[2]) {
     "fzf",
     "--reverse",
     "--preview",
-#if CHANGEDIR_NO_IGNORE
-    "exa --git --tree -L3 -a -D -I=.git --group-directories-first --color=always {}",
-#else
-    "exa --git --tree -L3 -a -I=.git --group-directories-first --color=always {}",
-#endif
+    no_ignore ?
+      "exa --git --tree -L3 -a -D -I=.git --group-directories-first --color=always {}"
+      : "exa --git --tree -L3 -a -I=.git --group-directories-first --color=always {}"
+    ,
     NULL
   };
 
