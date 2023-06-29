@@ -1,4 +1,4 @@
-#include "myutils.h"
+#include "myutils.h" // pipe_t, _dup2(), _close(), _exec()
 
 #define BUF_SIZE 128
 #define FIELD_MATCH_SEPARATOR ":"
@@ -7,13 +7,13 @@
 #define DEBUG 0
 #endif
 
-int parent(int fds[2], pid_t childpid);
-int child1(int fds[2]);
-int child2(int fds[2]);
+int parent(pipe_t p, pid_t childpid);
+int child1(pipe_t p);
+int child2(pipe_t p);
 
 int main() {
-  int fds[2];
-  if (pipe(fds) != 0) {
+  pipe_t p;
+  if (pipe(p.fds) != 0) {
     perror("pipe() error");
     return 1;
   }
@@ -24,21 +24,21 @@ int main() {
   pid_t pid = fork();
   if (pid == -1) {
     perror("fork() error");
-    __close(fds[0]);
-    __close(fds[1]);
+    _close(p.r_end);
+    _close(p.w_end);
     return 1;
   }
   else if (pid == 0)
-    return child1(fds);
+    return child1(p);
 
-  parent(fds, pid);
+  return parent(p, pid);
 }
 
 
-int parent(int fds[2], pid_t childpid) {
-  __close(fds[1]);
+int parent(pipe_t p, pid_t childpid) {
+  _close(p.w_end);
 
-  FILE *r_fp = fdopen(fds[0], "r");
+  FILE *r_fp = fdopen(p.r_end, "r");
   if (!r_fp) {
     perror("fdopen()");
     return 1;
@@ -83,34 +83,17 @@ int parent(int fds[2], pid_t childpid) {
   // we effectively increase the size of `line` by 1; this is always possible
   // because if `line` is parsed, then it will always *at least* have a newline
   // char following the number string.
-  char *s = line;
-  while (*(s++));
-  *(s + 1) = '\0';
-  while (s > line) {
-    *s = *(s - 1);
-    s--;
-  }
-  *s = '+';
+  size_t i = 0;
+  while (line[i++]);
+  line[i] = '\0';
+  while (--i > 0)
+    line[i] = line[i - 1];
+  *line = '+';
 
 #if DEBUG
   printf("file: %s\nline: %s\nnvim %s %s\n", file, line, file, line);
   return 0;
 #else
-
-#if 0
-  // TODO: why wait here?
-  int stat_loc;
-  pid_t _childpid = waitpid(childpid, &stat_loc, 0);
-  if (_childpid == -1)
-    perror("waitpid() error");
-  else if (_childpid != childpid) {
-    ;
-    // TODO: how to handle this?? probably not even necessary.
-  }
-  else if (!WIFEXITED(stat_loc))
-    fprintf(stderr, "Child exited abnormally with exit code %d\n",
-                    WEXITSTATUS(stat_loc));
-#endif
 
   // launch nvim at the specified file and line.
   char *_argv[] = {
@@ -120,44 +103,44 @@ int parent(int fds[2], pid_t childpid) {
     NULL
   };
 
-  return __myexec(_argv);
+  return _exec(_argv);
 #endif
 }
 
 
-int child1(int main_fds[2]) {
-  __close(main_fds[0]);
+int child1(pipe_t main_p) {
+  _close(main_p.r_end);
 
-  if (__dup2(main_fds[1], STDOUT_FILENO) == -1) {
-    __close(main_fds[1]);
+  if (_dup2(main_p.w_end, STDOUT_FILENO) == -1) {
+    _close(main_p.w_end);
     return 1;
   }
 
-  int fds[2];
-  if (pipe(fds) != 0) {
+  pipe_t p;
+  if (pipe(p.fds) != 0) {
     perror("pipe()");
-    __close(main_fds[1]);
+    _close(main_p.w_end);
     return 1;
   }
 
   pid_t pid = fork();
   if (pid == -1) {
     perror("pipe()");
-    __close(main_fds[1]);
-    __close(fds[0]);
-    __close(fds[1]);
+    _close(main_p.w_end);
+    _close(p.r_end);
+    _close(p.w_end);
     return 1;
   }
   else if (pid == 0)
-    return child2(fds);
+    return child2(p);
 
-  __close(fds[1]);
+  _close(p.w_end);
 
 
-  if (__dup2(fds[0], STDIN_FILENO) == -1) {
+  if (_dup2(p.r_end, STDIN_FILENO) == -1) {
     // TODO: does anything else need to be closed here?
-    __close(fds[0]);
-    __close(main_fds[1]);
+    _close(p.r_end);
+    _close(main_p.w_end);
     return 1;
   }
 
@@ -173,20 +156,20 @@ int child1(int main_fds[2]) {
     NULL
   };
 
-  __myexec(fzf_argv);
+  _exec(fzf_argv);
 
   // TODO: should anything else be closed?
-  __close(main_fds[0]);
-  __close(main_fds[1]);
+  _close(main_p.r_end);
+  _close(main_p.w_end);
   return 1;
 }
 
 
-int child2(int fds[2]) {
-  __close(fds[0]);
+int child2(pipe_t p) {
+  _close(p.r_end);
 
-  if (__dup2(fds[1], STDOUT_FILENO) == -1) {
-    __close(fds[1]);
+  if (_dup2(p.w_end, STDOUT_FILENO) == -1) {
+    _close(p.w_end);
     return 1;
   }
 
@@ -204,5 +187,5 @@ int child2(int fds[2]) {
     NULL
   };
 
-  return __myexec(rg_argv);
+  return _exec(rg_argv);
 }
