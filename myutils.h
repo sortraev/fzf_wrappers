@@ -22,14 +22,14 @@ int _dup2(int a, int b) {
         );
 
   if (r == -1)
-    perror("dup2() error");
+    perror("dup2()");
   return r;
 }
 
 int _close(int fd) {
   int r = close(fd);
   if (r != 0)
-    perror("close() error");
+    perror("close()");
   return r;
 }
 

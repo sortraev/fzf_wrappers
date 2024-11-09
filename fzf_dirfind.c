@@ -69,8 +69,8 @@ int fzf_parent(pipe_t p, int ignore) {
     "--reverse",
     "--preview",
     ignore ?
-        "exa --git --tree -L3 -a    -I=.git --group-directories-first --color=always {}"
-      : "exa --git --tree -L3 -a -D -I=.git --group-directories-first --color=always {}"
+        "eza --git --tree -L3 -a    -I=.git --group-directories-first --color=always {}"
+      : "eza --git --tree -L3 -a -D -I=.git --group-directories-first --color=always {}"
     ,
     NULL
   };

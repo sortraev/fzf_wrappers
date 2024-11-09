@@ -1,6 +1,6 @@
 #include "myutils.h" // pipe_t, _dup2(), _close(), _exec()
 
-#define BUF_SIZE 128
+#define BUF_SIZE 512
 #define FIELD_MATCH_SEPARATOR ":"
 
 #ifndef DEBUG
@@ -14,7 +14,7 @@ int child2(pipe_t p);
 int main() {
   pipe_t p;
   if (pipe(p.fds) != 0) {
-    perror("pipe() error");
+    perror("pipe()");
     return 1;
   }
 
@@ -23,7 +23,7 @@ int main() {
    */
   pid_t pid = fork();
   if (pid == -1) {
-    perror("fork() error");
+    perror("fork()");
     _close(p.r_end);
     _close(p.w_end);
     return 1;
@@ -48,9 +48,10 @@ int parent(pipe_t p, pid_t childpid) {
   while (fgets(buf, BUF_SIZE, r_fp) != NULL);
 
 
-  if (fclose(r_fp) != 0)
+  if (fclose(r_fp) != 0) {
     // don't exit, just continue and let OS handle it.
-    perror("fclose() error");
+    // perror("fclose()");
+  }
 
   if (!*buf) {
     // buf is empty at this point if fzf was interrupted *or* if the input to
@@ -71,11 +72,12 @@ int parent(pipe_t p, pid_t childpid) {
                 && *tmp == '\0';              // check strtol() success.
 
   if (!good_parse) {
-    fprintf(stderr, "\x1b[31mfzf_fif error: Failed to parse file and/or line from rg "
-                    "output.\x1b[0m\n"
-                    "Got: file = \"%s\", line = \"%s\".\n\n"
-                    "Note: fzf_fif does not work with file names containing "
-                    "'"FIELD_MATCH_SEPARATOR"'.\n", file, line);
+    fprintf(stderr,
+        "\x1b[31mfzf_fif error: Failed to parse file and/or line from rg output.\x1b[0m\n"
+        "Got: file = \"%s\" and line = \"%s\" from \"%s\".\n\n"
+        "Note: fzf_fif compiled with field match separator \""FIELD_MATCH_SEPARATOR"\", "
+        "and hence does not support file names containing \""FIELD_MATCH_SEPARATOR"\".\n",
+        file, line, tmp);
     return 1;
   }
 
@@ -153,6 +155,7 @@ int child1(pipe_t main_p) {
     "--preview-window=~2,+{2}",
     "--preview",
     "bat --theme gruvbox-dark --color=always {1} --highlight-line {2} --style=header,numbers",
+    // "bat --theme gruvbox-light --color=always {1} --highlight-line {2} --style=header,numbers",
     NULL
   };
 
