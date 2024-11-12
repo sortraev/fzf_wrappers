@@ -66,6 +66,7 @@ int parent(pipe_t p, pid_t childpid) {
   char *tmp;
   char *file = strtok_r(buf,  FIELD_MATCH_SEPARATOR, &tmp);
   char *line = strtok_r(NULL, FIELD_MATCH_SEPARATOR, &tmp);
+  char *s = tmp + 1;
 
   int good_parse = file && line               // correctly parsed file and line.
                 && strtol(line, &tmp, 10) > 0 // line nums should be positive.
@@ -85,12 +86,11 @@ int parent(pipe_t p, pid_t childpid) {
   // we effectively increase the size of `line` by 1; this is always possible
   // because if `line` is correctly parsed, then it will always be followed by
   // *at least* two bytes (the original field/match separator and NULL-terminator).
-  size_t i = 0;
-  while (line[i++]);
-  line[i] = '\0';
-  while (--i > 0)
-    line[i] = line[i - 1];
-  *line = '+';
+  while (s > line) {
+    *s = *(s - 1);
+    s--;
+  }
+  *s = '+';
 
 #if DEBUG
   printf("file: %s\nline: %s\nnvim %s %s\n", file, line, file, line);
