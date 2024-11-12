@@ -83,8 +83,8 @@ int parent(pipe_t p, pid_t childpid) {
 
   // append '+' to start of line string.
   // we effectively increase the size of `line` by 1; this is always possible
-  // because if `line` is parsed, then it will always *at least* have a newline
-  // char following the number string.
+  // because if `line` is correctly parsed, then it will always be followed by
+  // *at least* two bytes (the original field/match separator and NULL-terminator).
   size_t i = 0;
   while (line[i++]);
   line[i] = '\0';
