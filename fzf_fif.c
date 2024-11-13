@@ -1,5 +1,7 @@
 #include "myutils.h" // pipe_t, _dup2(), _close(), _exec()
 
+// TODO: max path length is 4096 in Linux, so might want to change this one.
+// note that BUF_SIZE should also account for the line length substring.
 #define BUF_SIZE 512
 #define FIELD_MATCH_SEPARATOR ":"
 
@@ -45,6 +47,8 @@ int parent(pipe_t p, pid_t childpid) {
   }
 
   char buf[BUF_SIZE] = { 0 };
+  // TODO: should have some error handling here, in particular for the case
+  // where a file name happens to be larger than BUF_SIZE, however unlikely.
   while (fgets(buf, BUF_SIZE, r_fp) != NULL);
 
 
@@ -59,10 +63,10 @@ int parent(pipe_t p, pid_t childpid) {
     return 0;
   }
 
-  // extract filename and line number.
 #if DEBUG
-  printf("buf: %s\n", buf);
+  fprintf(stderr, "DEBUG: buf: %s\n", buf);
 #endif
+  // extract filename and line number.
   char *tmp;
   char *file = strtok_r(buf,  FIELD_MATCH_SEPARATOR, &tmp);
   char *line = strtok_r(NULL, FIELD_MATCH_SEPARATOR, &tmp);
@@ -75,10 +79,10 @@ int parent(pipe_t p, pid_t childpid) {
   if (!good_parse) {
     fprintf(stderr,
         "\x1b[31mfzf_fif error: Failed to parse file and/or line from rg output.\x1b[0m\n"
-        "Got: file = \"%s\" and line = \"%s\" from \"%s\".\n\n"
+        "Got: file = \"%s\" and line = \"%s\".\n\n"
         "Note: fzf_fif compiled with field match separator \""FIELD_MATCH_SEPARATOR"\", "
         "and hence does not support file names containing \""FIELD_MATCH_SEPARATOR"\".\n",
-        file, line, tmp);
+        file, line);
     return 1;
   }
 
@@ -93,7 +97,9 @@ int parent(pipe_t p, pid_t childpid) {
   *s = '+';
 
 #if DEBUG
-  printf("file: %s\nline: %s\nnvim %s %s\n", file, line, file, line);
+  fprintf(stderr, "DEBUG: file: %s\n", file);
+  fprintf(stderr, "DEBUG: line: %s\n", line);
+  fprintf(stderr, "DEBUG: 'nvim %s %s'\n", file, line);
   return 0;
 #else
 
