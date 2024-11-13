@@ -3,7 +3,9 @@
 // TODO: max path length is 4096 in Linux, so might want to change this one.
 // note that BUF_SIZE should also account for the line length substring.
 #define BUF_SIZE 512
-#define FIELD_MATCH_SEPARATOR ":"
+
+#define RG_MAX_COLUMNS "128"
+#define RG_FIELD_MATCH_SEPARATOR ":"
 
 #ifndef DEBUG
 #define DEBUG 0
@@ -68,8 +70,8 @@ int parent(pipe_t p, pid_t childpid) {
 #endif
   // extract filename and line number.
   char *tmp;
-  char *file = strtok_r(buf,  FIELD_MATCH_SEPARATOR, &tmp);
-  char *line = strtok_r(NULL, FIELD_MATCH_SEPARATOR, &tmp);
+  char *file = strtok_r(buf,  RG_FIELD_MATCH_SEPARATOR, &tmp);
+  char *line = strtok_r(NULL, RG_FIELD_MATCH_SEPARATOR, &tmp);
   char *s = tmp + 1;
 
   int good_parse = file && line               // correctly parsed file and line.
@@ -80,8 +82,8 @@ int parent(pipe_t p, pid_t childpid) {
     fprintf(stderr,
         "\x1b[31mfzf_fif error: Failed to parse file and/or line from rg output.\x1b[0m\n"
         "Got: file = \"%s\" and line = \"%s\".\n\n"
-        "Note: fzf_fif compiled with field match separator \""FIELD_MATCH_SEPARATOR"\", "
-        "and hence does not support file names containing \""FIELD_MATCH_SEPARATOR"\".\n",
+        "Note: fzf_fif compiled with field match separator \""RG_FIELD_MATCH_SEPARATOR"\", "
+        "and hence does not support file names containing \""RG_FIELD_MATCH_SEPARATOR"\".\n",
         file, line);
     return 1;
   }
@@ -157,7 +159,7 @@ int child1(pipe_t main_p) {
     "fzf",
     "--ansi",
     "--reverse",
-    "--delimiter="FIELD_MATCH_SEPARATOR,
+    "--delimiter="RG_FIELD_MATCH_SEPARATOR,
     "--preview-window=~2,+{2}",
     "--preview",
     "bat --theme gruvbox-dark --color=always {1} --highlight-line {2} --style=header,numbers",
@@ -186,8 +188,9 @@ int child2(pipe_t p) {
     "rg",
     "--line-number",
     // "-m1", // only one match per file (TODO: find out how this would work).
+    "--max-columns="RG_MAX_COLUMNS,
     "--with-filename",
-    "--field-match-separator="FIELD_MATCH_SEPARATOR,
+    "--field-match-separator="RG_FIELD_MATCH_SEPARATOR,
     "--color=always",
     "--colors=match:none",
     "--colors=path:fg:cyan",
