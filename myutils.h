@@ -14,6 +14,10 @@ typedef union {
 } pipe_t;
 
 #define DUP2_TIMEOUT 20
+#if (DUP2_TIMEOUT <= 0)
+#error DUP2_TIMEOUT should be positive
+#endif
+
 int _dup2(int a, int b) {
   int k = 0;
   int r;
@@ -37,12 +41,8 @@ int _exec(char *const _argv[]) {
   char *file = _argv[0];
   execvp(file, _argv);
 
-  char *err_msg = malloc((9 + strlen(file) + 1) * sizeof(char));
-  if (!err_msg)
-    perror("malloc()");
+  fprintf(stderr, "execvp(\"%s\", ...): ", file);
+  perror(NULL);
 
-  sprintf(err_msg, "execvp() %s", file);
-  perror(err_msg);
-  free(err_msg);
   return 1;
 }
