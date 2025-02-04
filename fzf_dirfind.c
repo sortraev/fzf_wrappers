@@ -66,7 +66,6 @@ int fzf_parent(pipe_t p, int ignore) {
 
   char *_argv[] = {
     "fzf",
-    "--reverse",
     "--preview",
     ignore ?
         "eza --git --tree -L3 -a    -I=.git --group-directories-first --color=always {}"

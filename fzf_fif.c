@@ -1,4 +1,5 @@
 #include "myutils.h" // pipe_t, _dup2(), _close(), _exec()
+#include <sys/wait.h>
 
 // TODO: max path length is 4096 in Linux, so might want to change this one.
 // note that BUF_SIZE should also account for the line length substring.
@@ -11,9 +12,9 @@
 #define DEBUG 0
 #endif
 
-int parent(pipe_t p, pid_t childpid);
-int child1(pipe_t p);
-int child2(pipe_t p);
+int nvim_proc(pipe_t p, pid_t childpid);
+int fzf_proc(pipe_t p);
+int rg_proc(pipe_t p);
 
 int main() {
   pipe_t p;
@@ -33,13 +34,13 @@ int main() {
     return 1;
   }
   else if (pid == 0)
-    return child1(p);
+    return fzf_proc(p);
 
-  return parent(p, pid);
+  return nvim_proc(p, pid);
 }
 
 
-int parent(pipe_t p, pid_t childpid) {
+int nvim_proc(pipe_t p, pid_t fzf_proc_childpid) {
   _close(p.w_end);
 
   FILE *r_fp = fdopen(p.r_end, "r");
@@ -52,7 +53,6 @@ int parent(pipe_t p, pid_t childpid) {
   // TODO: should have some error handling here, in particular for the case
   // where a file name happens to be larger than BUF_SIZE, however unlikely.
   while (fgets(buf, BUF_SIZE, r_fp) != NULL);
-
 
   if (fclose(r_fp) != 0) {
     // don't exit, just continue and let OS handle it.
@@ -105,6 +105,9 @@ int parent(pipe_t p, pid_t childpid) {
   return 0;
 #else
 
+
+  waitpid(fzf_proc_childpid, NULL, WNOHANG);
+
   // launch nvim at the specified file and line.
   char *_argv[] = {
     "nvim",
@@ -118,7 +121,7 @@ int parent(pipe_t p, pid_t childpid) {
 }
 
 
-int child1(pipe_t main_p) {
+int fzf_proc(pipe_t main_p) {
   _close(main_p.r_end);
 
   if (_dup2(main_p.w_end, STDOUT_FILENO) == -1) {
@@ -142,7 +145,7 @@ int child1(pipe_t main_p) {
     return 1;
   }
   else if (pid == 0)
-    return child2(p);
+    return rg_proc(p);
 
   _close(p.w_end);
 
@@ -154,16 +157,15 @@ int child1(pipe_t main_p) {
     return 1;
   }
 
-
   char *fzf_argv[] = {
     "fzf",
-    "--ansi",
-    "--reverse",
+    "--nth=3",
+    "--info=inline: ",
     "--delimiter="RG_FIELD_MATCH_SEPARATOR,
+    "--ansi",
     "--preview-window=~2,+{2}",
     "--preview",
     "bat --theme gruvbox-dark --color=always {1} --highlight-line {2} --style=header,numbers",
-    // "bat --theme gruvbox-light --color=always {1} --highlight-line {2} --style=header,numbers",
     NULL
   };
 
@@ -175,8 +177,7 @@ int child1(pipe_t main_p) {
   return 1;
 }
 
-
-int child2(pipe_t p) {
+int rg_proc(pipe_t p) {
   _close(p.r_end);
 
   if (_dup2(p.w_end, STDOUT_FILENO) == -1) {
@@ -186,8 +187,8 @@ int child2(pipe_t p) {
 
   char *rg_argv[] = {
     "rg",
+    "--no-messages", // ignore most error messages
     "--line-number",
-    // "-m1", // only one match per file (TODO: find out how this would work).
     "--max-columns="RG_MAX_COLUMNS,
     "--with-filename",
     "--field-match-separator="RG_FIELD_MATCH_SEPARATOR,
@@ -199,5 +200,7 @@ int child2(pipe_t p) {
     NULL
   };
 
-  return _exec(rg_argv);
+  _exec(rg_argv);
+
+  _close(p.w_end);
 }
