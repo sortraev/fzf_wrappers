@@ -41,7 +41,16 @@ int _exec(char *const _argv[]) {
   char *file = _argv[0];
   execvp(file, _argv);
 
-  fprintf(stderr, "execvp(\"%s\", ...): ", file);
+  fprintf(stderr, "Failed to execute execvp(\"%s\"", file);
+
+  _argv++;
+  while (*_argv) {
+    fprintf(stderr, ", \"%s\"", *_argv);
+    _argv++;
+  }
+
+  fprintf(stderr, ")\n");
+
   perror(NULL);
 
   return 1;
