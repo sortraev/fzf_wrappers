@@ -1,4 +1,4 @@
-all: install
+all: fzf_fif fzf_dirfind
 
 fzf_fif: fzf_fif.c myutils.h
 	gcc -O3 $^ -o $@
