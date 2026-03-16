@@ -159,7 +159,7 @@ int fzf_proc(pipe_t main_p) {
 
   char *fzf_argv[] = {
     "fzf",
-    "--nth=3",
+    "--nth=3..", // ignore file and line fields
     "--info=inline: ",
     "--delimiter="RG_FIELD_MATCH_SEPARATOR,
     "--ansi",
